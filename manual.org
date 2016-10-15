@@ -1,0 +1,226 @@
+* Servidor en Digital Ocean VPS
+
+Un servido en DO provee un acceso SSH, los pasos
+a seguir para configurarlo e instalar lo necesario para correr
+un proyecto web, en principio hecho con django, será lo siguiente
+
+apt-get install git
+apt-get install nginx-full
+apt-get install build-essential
+apt-get install libz-dev
+apt-get install libreadline-dev
+sudo apt-get install libncursesw5-dev
+sudo apt-get install libssl-dev
+sudo apt-get install libgdbm-dev
+sudo apt-get install libsqlite3-dev
+sudo apt-get install libbz2-dev
+sudo apt-get install liblzma-dev
+sudo apt-get install tk-dev
+sudo apt-get install libdb-dev
+sudo apt-get install libc6-dev
+sudo apt-get build-dep python3
+sudo apt-get install openssl-dev
+sudo apt-get install openssl
+sudo apt-get install libssl-dev
+sudo apt-get install zlib1g-dev
+sudo apt-get install zlib1g
+apt-get install python3-pip
+apt-get install libjpeg62-turbo-dev
+pip install pillow
+pip3 install virtualenv
+apt-get install json-glib-tools libqjson-dev lua-cjson-dev libjson-perl libjson-multivalueordered-perl libjson-any-perl libjson-glib-dev 
+apt-get install libpcre3 libpcre3-dev
+pip3 install uwsgi
+
+
+** Instalar Postgres
+
+Según la versión:
+
+https://www.postgresql.org/download/linux/debian/
+
+Crear archivo en list de sources:
+
+E instalar:
+
+apt-get install postgresql-server-dev-9.4 postgresql-9.4 postgresql-9.4-postgis-scripts postgresql-plpython3-9.4 postgresql-pltcl-9.4 postgresql-client-9.4 postgresql-contrib-9.4 postgresql-9.4-pgrouting postgresql-9.4-prefix postgresql-9.4-preprepare postgresql-9.4-repmgr postgresql-9.4-pgq3 postgresql-9.4-slony1-2 
+
+* Crear usuario para proyecto
+
+adduser <name>
+
+* Configuración
+
+** Virtualenv
+
+Añadir a /.profile/ del usuario:
+
+#+BEGIN_SRC shell
+export VIRTUALENVWRAPPER_PYTHON=/usr/bin/python3
+export WORKON_HOME=$HOME/.virtualenv
+export PROJECT_HOME=$HOME/public_html
+source /usr/local/bin/virtualenvwrapper.sh
+#+END_SRC
+
+mkvirtualenv <web>
+
+Si copiar o replicar proyecto dentro de public_html. Se sugiere
+usar nombre de carpeta /'web'/
+
+Instalar requerimientos, ingresando primero al ambiente virtual:
+
+workon web
+pip install -r requeriments
+
+** Postgres
+
+Ingresar a usuario
+
+su postgres
+
+En ambiente postgresql:
+
+#+BEGIN_SRC psql
+postgres=# create database [dbname];
+CREATE DATABASE
+postgres=# create role [dbuser];
+CREATE ROLE
+postgres=# alter role [dbuser] with createuser inherit login;
+ALTER ROLE
+postgres=# grant all privileges on database [dbname] to [dbuser];
+GRANT
+postgres=# alter role [dbuser] with password '[passw123]';
+ALTER ROLE
+#+END_SRC
+
+Cargar respaldo sql a database:
+
+psql dbname -U dbuser < respaldo.sql
+
+** Nginx
+
+El archivo se debe guardar en sites-avalaible dentro de la carpeta
+/etc/nginx
+
+Debe contener las directrices para conectar al socket del website.
+
+#+BEGIN_SRC shell
+upstream django {
+  # fail_timeout=0 means we always retry an upstream even if it failed
+  # to return a good HTTP response (in case the Unicorn master nukes a
+  # single worker for timing out).
+
+ server unix:///tmp/site.sock;
+}
+
+server {
+       	listen 80 default;
+
+      	server_name www.webname.cl webname.cl;
+	charset utf-8;
+	
+	client_max_body_size 100M;
+	uwsgi_read_timeout 600;
+	proxy_read_timeout 60s;	
+	#logs
+	access_log /home/project/logs/access.log;
+	error_log /home/project/logs/error.log;
+
+    # Django statics
+
+    location /static {
+        alias /home/project/public_html/web/sjhc_web/files/static; # your Django project's static files - amend as required
+    }
+
+    location /media {
+        alias /home/project/public_html/web/sjhc_web/files/media; # your Django project's st$
+    }
+
+
+    location / {
+        uwsgi_pass  django;
+        include     /home/project/public_html/web/uwsgi_params; # the uwsgi_params file you installed
+    }
+}
+#+END_SRC
+
+Luego, en sites-enabled realizar el enlace simbólico al archivo:
+ln -s ../sites-available/sjhc.conf .
+rm default
+
+Recargar el servicio nginx
+
+service nginx restart
+
+** Uwsgi
+
+Según la documentación en [[[http:https://uwsgi-docs.readthedocs.io/en/latest/WSGIquickstart.html#deploying-django][Uwsgi]]]
+
+#+BEGIN_SRC 
+[uwsgi]
+project=[venv_name]
+user=[project]
+base=/home/%(user)
+
+socket=%(base)/socks/[project].sock
+chmod-socket=666
+chown-socket=www-data
+
+uid=www-data
+gid=www-data
+
+
+chdir=/home/[user]/public_html/web/sjhc_web
+home=/home/[user]/public_html/web
+virtualenv=/home/[user]/.virtualenv/web
+
+module=[project_django].wsgi
+processes=4
+threads=2
+
+env=SECRET_KEY=[django-key]
+env=DATABASE_NAME=[dbname]
+env=DATABASE_USER=[dbuser]
+env=DATABASE_PASSWORD=[dbpass]
+env=EMAIL_HOST_PASSWORD=[email_pass]
+#+END_SRC
+
+Este archivo se almacena en / "/etc/uwsgi/sites/" /
+
+En /etc/uwsgi:
+
+#+BEGIN_SRC
+[uwsgi]
+emperor = /etc/uwsgi/sites
+uid = www-data
+gid = www-data
+#+END_SRC
+
+Y se configura, además el systemd/system para inicial al partir.
+
+#+BEGIN_SRC 
+[Unit]
+Description=uWSGI Emperor
+After=syslog.target
+
+[Service]
+ExecStart=/usr/local/bin/uwsgi --ini /etc/uwsgi/emperor.ini
+# Requires systemd version 211 or newer
+RuntimeDirectory=uwsgi
+Restart=always[uwsgi]
+emperor = /etc/uwsgi/vassals
+uid = www-data
+gid = www-data
+KillSignal=SIGTERM + “die-on-term” 
+Type=notify
+StandardError=syslog
+NotifyAccess=all
+
+[Install]
+WantedBy=multi-user.target
+#+END_SRC
+
+Inicializar:
+
+systemctl start uwsgi.service
+
