@@ -3,6 +3,7 @@
 Un servido en DO provee un acceso SSH, los pasos
 a seguir para configurarlo e instalar lo necesario para correr
 un proyecto web, en principio hecho con django, será lo siguiente
+#+BEGIN_SRC shell
 
 apt-get install git
 apt-get install nginx-full
@@ -31,6 +32,7 @@ pip3 install virtualenv
 apt-get install json-glib-tools libqjson-dev lua-cjson-dev libjson-perl libjson-multivalueordered-perl libjson-any-perl libjson-glib-dev 
 apt-get install libpcre3 libpcre3-dev
 pip3 install uwsgi
+#+END_SRC
 
 
 ** Instalar Postgres
@@ -196,7 +198,7 @@ uid = www-data
 gid = www-data
 #+END_SRC
 
-Y se configura, además el systemd/system para inicial al partir.
+Y se configura, además el /etc/systemd/system para iniciar al partir.
 
 #+BEGIN_SRC 
 [Unit]
